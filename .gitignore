@@ -2,6 +2,7 @@
 build/
 dist/
 venv/
+data/
 __pycache__/
 *.html
 *.so
