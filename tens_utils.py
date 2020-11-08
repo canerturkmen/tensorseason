@@ -49,7 +49,7 @@ def dct_dft_errors(data, max_params, param_sweep_scale="linear", no_params=1000,
     # RMSEs with DCT
     param_sweep = get_param_sweep(max_params, param_sweep_scale, no_params)
     dct_errors = [
-        rmse(data, dct_reconstruct(data, p))
+        error_fn(data, dct_reconstruct(data, p))
         for p in param_sweep
     ]
 

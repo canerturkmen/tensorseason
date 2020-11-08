@@ -3,34 +3,18 @@ Define a set of classes that function like forecasters, akin
 to the R forecast package.
 """
 
-from typing import List, Dict, Tuple, Callable
+from typing import List, Tuple, Callable
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import tensorly as tl
-from gluonts.dataset.util import to_pandas
-from gluonts.dataset.repository.datasets import get_dataset, dataset_recipes
-from scipy import interpolate
-from scipy.stats import linregress
 from scipy.fftpack import rfft, irfft, dct
 from tensorly.decomposition import parafac, tucker
 
-from tens_utils import (
-    get_gluonts_dataset,
-    multifold,
-    repeat,
-    dct_dft_errors,
-    tensor_errors,
-    trend_cycle_decompose,
-    naive_seasonal_decompose,
-    analyze_and_plot,
-    plot_comparison,
-    mad,
-    rmse, get_param_sweep, dct_reconstruct, dft_reconstruct,
-)
+from tens_utils import mad, multifold, rmse
 
-TENSOR_MAX_ITER = 1_000
+
+TENSOR_MAX_ITER = 10_000
 
 
 class ForecasterResult:
