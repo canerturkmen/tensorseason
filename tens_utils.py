@@ -185,6 +185,52 @@ def get_gluonts_dataset(dataset_name):
     return train_datas, test_datas, lens, freqs
 
 
+def trend_cycle_decompose(df: pd.Series, w: int, df_train=None):
+    assert type(df) == pd.core.series.Series
+    assert type(w) == int
+    assert w > 1
+
+    dfi = df.interpolate("linear")
+    trend_cycle = dfi.rolling(w).mean().fillna(method="bfill")
+    residual = dfi - trend_cycle
+
+    return trend_cycle, residual
+
+
+def naive_seasonal_decompose(df: pd.Series, w: int, df_train=None):
+    a = np.array(df)
+    new_len_a = (len(a) // w) * w
+
+    seasonal = multifold(a[:new_len_a], [w]).mean(0)
+    seas_effect = pd.Series(
+        repeat(seasonal, len(a) // w + 1)[:len(a)], index=df.index
+    )
+
+    return seas_effect, df - seas_effect
+
+
+def analyze_and_plot(df, period: int, plot=True):
+    tc, res_tc = trend_cycle_decompose(df, period * 2)
+    seas, res_seas = naive_seasonal_decompose(res_tc, period * 7)
+
+    r2 = np.square(seas).sum() / np.square(res_tc).sum()
+
+    if plot:
+        f, axes = plt.subplots(3, figsize=(8, 5), sharex=True)
+        for ax_, title, obj in zip(
+                axes,
+                ["Trend-cycle", "Seasonal", "Residual"],
+                [tc, seas, res_seas]
+        ):
+            ax_.plot(obj)
+            ax_.set(title=title)
+
+        f.suptitle(f"R^2: {r2: .2f}")
+        plt.show()
+
+    return r2
+
+# DEPRECATED
 def tc_decompose(df, w, df_train=None):
     assert type(df) == pd.core.series.Series
     assert type(w) == int
@@ -253,3 +299,24 @@ def tensor_reconstruction(data: np.ndarray, folds: List[int], rank: int, decompo
         core, factors = tucker(tensor, ranks=ranks, n_iter_max=10000, tol=1.0e-15)
         return tl.tucker_to_tensor((core, factors)).ravel(), np.sum(
             [ranks[i] * tensor.shape[i] for i in range(1, len(tensor.shape))]) + np.prod(ranks[1:])
+
+
+def idct(w: np.ndarray, extr: int) -> np.ndarray:
+    """
+    Inverse DCT with extrapolation.
+
+    :param w: series to apply IDCT (DCT-III)
+    :param extr: number of time steps to extrapolate
+    :return:
+    """
+    N = len(w)
+    y = np.zeros(N + extr)
+
+    for k in range(N):
+        y[k] = w[0] + 2 * np.dot(
+            w[1:], np.cos(np.pi * (2 * k + 1) * np.arange(1, N) / (2 * N))
+        )
+
+    y[-extr:] = y[:extr]
+
+    return y / N / 2
