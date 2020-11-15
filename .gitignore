@@ -3,6 +3,8 @@ build/
 dist/
 venv/
 data/
+datasets/
+
 __pycache__/
 *.html
 *.so

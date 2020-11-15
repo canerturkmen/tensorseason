@@ -44,7 +44,6 @@ def mad(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return np.nanmean(np.abs(y_true - y_pred)).sum()
 
 
-
 def dct_dft_errors(data, max_params, param_sweep_scale="linear", no_params=1000, error_fn=rmse):
     # RMSEs with DCT
     param_sweep = get_param_sweep(max_params, param_sweep_scale, no_params)

@@ -1,29 +1,18 @@
+import json
+from pathlib import Path
+from random import sample
 from typing import List, Dict, Type, Tuple, Callable
+from uuid import uuid4
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import tensorly as tl
-from gluonts.dataset.util import to_pandas
-from gluonts.dataset.repository.datasets import get_dataset, dataset_recipes
-from scipy import interpolate
-from scipy.stats import linregress
-from scipy.fftpack import rfft, irfft, dct, idct
-from tensorly.decomposition import parafac, tucker
+from tqdm import tqdm
 
-from forecaster import SeasonalForecaster
+from forecaster import SeasonalForecaster, DCTForecaster, DFTForecaster, CPForecaster, TuckerForecaster, \
+    HoltWintersForecaster
 from tens_utils import (
-    get_gluonts_dataset,
-    multifold,
-    repeat,
-    dct_dft_errors,
-    tensor_errors,
-    trend_cycle_decompose,
-    naive_seasonal_decompose,
-    analyze_and_plot,
-    plot_comparison,
-    mad,
-    rmse, get_param_sweep, dct_reconstruct, dft_reconstruct,
+    get_param_sweep, mad, rmse, trend_cycle_decompose
 )
 
 
@@ -67,3 +56,119 @@ class SingleForecasterExperiment:
         ]
 
         return in_errors_dict, out_errors_dict, total_params, results
+
+
+class TensorSeasonExperiment:
+    """
+
+    Parameters
+    ----------
+    dataset_name: str
+        The dataset name to run the experiments on. There must be a directory under
+        `datasets/` with a matching name, which contains JSON files in GluonTS data set
+        format (with "start" and "target" keys).
+    folds: Tuple[int]
+        Number of `folds` in the multiple seasonal pattern, with the fastest index first.
+        For example, (24, 7).
+    nr_in_cycles: int
+        Number of cycles (a cycle has np.prod(folds) length) to consider in sample.
+    nr_examples: int
+        `nr_examples` many time series will be sampled (without replacement) from the data set
+        in order to perform experiments. If -1, all time series will be used.
+    dft_sweep_length: int
+        number of parameters in DFT and DCT
+    tensor_sweep_length: int
+        number of parameters (ranks) for tensor based methods
+    """
+    def __init__(
+        self,
+        dataset_name: str,
+        folds: Tuple[int],
+        nr_in_cycles: int,
+        nr_examples: int = 10,
+        dft_sweep_length: int = 100,
+        tensor_sweep_length: int = 8,
+        data_freq: str = "1h",
+    ) -> None:
+        self.dataset_name = dataset_name
+        self.nr_in_cycles = nr_in_cycles
+        self.folds = folds
+        self.nr_examples = nr_examples
+        self.dft_sweep_length = dft_sweep_length
+        self.tensor_sweep_length = tensor_sweep_length
+        self.data_freq = data_freq
+
+        self.data_path = Path.iterdir(Path("datasets/") / self.dataset_name)
+        self.data_path_list = [
+            d for d in self.data_path if ".DS_Store" not in str(d)
+        ]
+        self.data_indices = sample(range(len(self.data_path_list)), nr_examples)
+
+    def _get_dataset(self) -> List[Dict]:
+        dataset = []
+        for i in self.data_indices:
+            with open(self.data_path_list[i]) as fp:
+                dataset.append(json.load(fp))
+        return dataset
+
+    def _get_experiments(self) -> List[SingleForecasterExperiment]:
+        dft_sweep = get_param_sweep(
+            int(np.prod(self.folds)), "log", self.dft_sweep_length
+        )
+        tensor_sweep = list(range(1, self.tensor_sweep_length))
+
+        experiments = [
+            SingleForecasterExperiment(DCTForecaster, dft_sweep, folds=self.folds),
+            SingleForecasterExperiment(DFTForecaster, dft_sweep, folds=self.folds),
+            SingleForecasterExperiment(CPForecaster, tensor_sweep, folds=self.folds),
+            SingleForecasterExperiment(TuckerForecaster, tensor_sweep, folds=self.folds),
+            SingleForecasterExperiment(HoltWintersForecaster, [1], folds=self.folds),
+        ]
+
+        return experiments
+
+    def run(self):
+        dataset = self._get_dataset()
+        experiments = self._get_experiments()
+        experiment_id = str(uuid4())
+
+        frames = []
+
+        for data in tqdm(dataset):
+            time_index = pd.date_range(
+                start=pd.Timestamp(data["start"]),
+                periods=len(data["target"]),
+                freq=self.data_freq,
+            )
+
+            orig_data_df = pd.Series(
+                data["target"],
+                index=time_index,
+            )
+            tc, vals = trend_cycle_decompose(orig_data_df, w=int(2 * np.prod(self.folds)))
+
+            vals = vals / (vals.max() - vals.min())  # scale the residuals
+
+            for experiment in experiments:
+                ins, outs, pars, _ = experiment(vals, nr_in_cycles=self.nr_in_cycles)
+
+                result_columns = {}
+                for err in ins:
+                    result_columns[f"in_{err}"] = ins[err]
+                for err in outs:
+                    result_columns[f"out_{err}"] = outs[err]
+
+                results = pd.DataFrame(
+                    dict(
+                        parameters=pars,
+                        **result_columns,
+                    )
+                )
+                results["experiment_id"] = experiment_id
+                results["dataset"] = self.dataset_name
+                results["model"] = experiment.forecaster_class.__name__
+                results["data_id"] = data["id"]
+
+                frames.append(results)
+
+        return pd.concat(frames)
