@@ -99,6 +99,7 @@ class TensorSeasonExperiment:
         tensor_sweep_length: int = 8,
         data_freq: str = "1h",
         n_jobs: int = 1,
+        dataset_path: str = "datasets/",
     ) -> None:
         self.dataset_name = dataset_name
         self.nr_in_cycles = nr_in_cycles
@@ -109,11 +110,15 @@ class TensorSeasonExperiment:
         self.data_freq = data_freq
         self.n_jobs = n_jobs
 
-        data_path = Path.iterdir(Path("datasets/") / self.dataset_name)
+        data_path = Path.iterdir(Path(dataset_path) / self.dataset_name)
         self.data_path_list = [
             d for d in data_path if ".DS_Store" not in str(d)
         ]
-        self.data_indices = sample(range(len(self.data_path_list)), nr_examples)
+        self.data_indices = (
+            sample(range(len(self.data_path_list)), nr_examples)
+            if nr_examples > 0
+            else list(range(len(self.data_path_list)))
+        )
 
     def _get_dataset(self) -> List[Dict]:
         dataset = []
