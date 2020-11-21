@@ -85,6 +85,9 @@ class TensorSeasonExperiment:
         number of parameters in DFT and DCT
     tensor_sweep_length: int
         number of parameters (ranks) for tensor based methods
+    n_jobs: int
+        If greater than 1, joblib will be used to parallelize the experiment on `n_jobs`
+        workers.
     """
     def __init__(
         self,
@@ -95,6 +98,7 @@ class TensorSeasonExperiment:
         dft_sweep_length: int = 100,
         tensor_sweep_length: int = 8,
         data_freq: str = "1h",
+        n_jobs: int = 1,
     ) -> None:
         self.dataset_name = dataset_name
         self.nr_in_cycles = nr_in_cycles
@@ -103,10 +107,11 @@ class TensorSeasonExperiment:
         self.dft_sweep_length = dft_sweep_length
         self.tensor_sweep_length = tensor_sweep_length
         self.data_freq = data_freq
+        self.n_jobs = n_jobs
 
-        self.data_path = Path.iterdir(Path("datasets/") / self.dataset_name)
+        data_path = Path.iterdir(Path("datasets/") / self.dataset_name)
         self.data_path_list = [
-            d for d in self.data_path if ".DS_Store" not in str(d)
+            d for d in data_path if ".DS_Store" not in str(d)
         ]
         self.data_indices = sample(range(len(self.data_path_list)), nr_examples)
 
@@ -136,13 +141,9 @@ class TensorSeasonExperiment:
         return experiments
 
     def run(self):
-        dataset = self._get_dataset()
-        experiments = self._get_experiments()
-        experiment_id = str(uuid4())
+        def process_dataset(data, exp_id_):
+            frames_ = []
 
-        frames = []
-
-        for data in tqdm(dataset):
             time_index = pd.date_range(
                 start=pd.Timestamp(data["start"]),
                 periods=len(data["target"]),
@@ -154,10 +155,11 @@ class TensorSeasonExperiment:
                 index=time_index,
             )
             tc, vals = trend_cycle_decompose(orig_data_df, w=int(2 * np.prod(self.folds)))
-
             vals = vals / (vals.max() - vals.min())  # scale the residuals
 
-            for experiment in experiments:
+            exps_ = self._get_experiments()
+
+            for experiment in exps_:
                 ins, outs, pars, _ = experiment(vals, nr_in_cycles=self.nr_in_cycles)
 
                 result_columns = {}
@@ -172,11 +174,24 @@ class TensorSeasonExperiment:
                         **result_columns,
                     )
                 )
-                results["experiment_id"] = experiment_id
+                results["experiment_id"] = exp_id_
                 results["dataset"] = self.dataset_name
                 results["model"] = experiment.forecaster_class.__name__
                 results["data_id"] = data["id"]
 
-                frames.append(results)
+                frames_.append(results)
+
+            return pd.concat(frames_)
+
+        dataset = self._get_dataset()
+        experiment_id = str(uuid4())
+
+        if self.n_jobs > 1:
+            from joblib import Parallel, delayed
+            frames = Parallel(n_jobs=self.n_jobs)(
+                delayed(process_dataset)(dataset[i], experiment_id) for i in tqdm(range(len(dataset)))
+            )
+        else:
+            frames = [process_dataset(data, experiment_id) for data in tqdm(dataset)]
 
         return pd.concat(frames)
