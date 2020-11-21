@@ -15,10 +15,11 @@ __pycache__/
 .idea/
 .tox/
 
+*egg.info/
+
 MANIFEST*
 
 docs/build/
 
 docker/
 scripts/
-src/
