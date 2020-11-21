@@ -1,24 +1,18 @@
 from typing import List, Dict
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
-import tensorly as tl
-from gluonts.dataset.util import to_pandas
 
-
-from tens_utils import (
+from tensorseason.utils import (
     get_gluonts_dataset,
     mad,
     rmse,
     get_param_sweep,
     trend_cycle_decompose,
 )
-
-from forecaster import (
+from tensorseason.forecaster import (
     DCTForecaster, DFTForecaster, HoltWintersForecaster, CPForecaster, TuckerForecaster
 )
-from experiment import SingleForecasterExperiment, TensorSeasonExperiment
+from tensorseason.experiment import SingleForecasterExperiment, TensorSeasonExperiment
 
 
 if __name__ == "__main__":
