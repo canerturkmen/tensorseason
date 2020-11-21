@@ -2,11 +2,13 @@
 Define a set of classes that function like forecasters, akin
 to the R forecast package.
 """
-
+import copy
+import itertools
 from typing import List, Tuple, Callable
 
 import pandas as pd
 import numpy as np
+import scipy.linalg as spla
 import tensorly as tl
 from scipy.fftpack import rfft, irfft, dct
 from tensorly.decomposition import parafac, tucker
@@ -209,6 +211,7 @@ class CPForecaster(TensorForecaster):
 
     def tensor_reconstruction(self, data_in: np.ndarray) -> np.ndarray:
         tensor = multifold(data_in, list(self.folds))
+        tensor = copy.deepcopy(tensor)
         fac = parafac(tensor, rank=self.nr_params, n_iter_max=TENSOR_MAX_ITER, tol=1.0e-15, linesearch=True)
         return tl.cp_to_tensor(fac).ravel()
 
@@ -237,6 +240,7 @@ class TuckerForecaster(TensorForecaster):
 
     def tensor_reconstruction(self, data_in: np.ndarray) -> np.ndarray:
         tensor = multifold(data_in, list(self.folds))
+        tensor = copy.deepcopy(tensor)
 
         assert isinstance(self.nr_params, int)
 
@@ -262,6 +266,7 @@ class HoltWintersForecaster(TensorForecaster):
 
     def tensor_reconstruction(self, data_in: np.ndarray) -> np.ndarray:
         tensor = multifold(data_in, list(self.folds))
+        tensor = copy.deepcopy(tensor)
 
         for i in range(1, tensor.shape[0]):
             tensor[i] = tensor[i] * self.alpha + tensor[i-1] * (1 - self.alpha)
@@ -270,4 +275,39 @@ class HoltWintersForecaster(TensorForecaster):
 
 
 class FourierBasisRegressionForecaster(SeasonalForecaster):
-    pass
+    def __init__(
+        self,
+        folds: Tuple[int],
+        error_callbacks: Tuple[Callable] = (rmse, mad),
+        nr_params: int = 1,
+    ):
+        """
+        Parameters
+        ----------
+        nr_params:
+            number of Fourier basis components to generate for each fold
+        """
+        super().__init__(nr_params, folds, error_callbacks)
+        self.nr_total_params = int(len(folds) * nr_params * 2 + 1)
+
+    def run_forecast(self, vals: pd.Series, nr_in_cycles: int) -> Tuple[np.ndarray, np.ndarray]:
+        nr_in_steps = int(nr_in_cycles * np.prod(self.folds))
+
+        t = np.arange(len(vals), dtype=float)
+        periods = [np.prod(self.folds[:n]) for n in range(1, len(self.folds) + 1)]
+
+        basis_tuples = [
+            (np.sin(2 * np.pi * t * n / P), np.cos(2 * np.pi * t * n / P)) for n, P in
+            itertools.product(range(1, self.nr_params + 1), periods)
+        ]
+
+        basis = np.concatenate([np.array(x) for x in basis_tuples])
+        X = np.concatenate([np.ones(basis.shape[-1])[np.newaxis, :], basis]).T
+        y = vals.values
+
+        y_in = y[:nr_in_steps]
+        X_in, X_out = X[:nr_in_steps], X[nr_in_steps:]
+
+        beta, _, _, _ = spla.lstsq(X_in, y_in)
+
+        return X_in.dot(beta), X_out.dot(beta)

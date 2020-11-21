@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from forecaster import SeasonalForecaster, DCTForecaster, DFTForecaster, CPForecaster, TuckerForecaster, \
-    HoltWintersForecaster
+    HoltWintersForecaster, FourierBasisRegressionForecaster
 from tens_utils import (
     get_param_sweep, mad, rmse, trend_cycle_decompose
 )
@@ -116,12 +116,14 @@ class TensorSeasonExperiment:
             int(np.prod(self.folds)), "log", self.dft_sweep_length
         )
         tensor_sweep = list(range(1, self.tensor_sweep_length))
+        fbm_sweep = list(range(1, 40))
 
         experiments = [
             SingleForecasterExperiment(DCTForecaster, dft_sweep, folds=self.folds),
             SingleForecasterExperiment(DFTForecaster, dft_sweep, folds=self.folds),
             SingleForecasterExperiment(CPForecaster, tensor_sweep, folds=self.folds),
             SingleForecasterExperiment(TuckerForecaster, tensor_sweep, folds=self.folds),
+            SingleForecasterExperiment(FourierBasisRegressionForecaster, fbm_sweep, folds=self.folds),
             SingleForecasterExperiment(HoltWintersForecaster, [1], folds=self.folds),
         ]
 

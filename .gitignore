@@ -4,6 +4,7 @@ dist/
 venv/
 data/
 datasets/
+results/
 
 __pycache__/
 *.html
