@@ -15,7 +15,8 @@ __pycache__/
 .idea/
 .tox/
 
-*egg.info/
+.DS_Store
+*egg-info/
 
 MANIFEST*
 

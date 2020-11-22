@@ -7,7 +7,7 @@ if __name__ == "__main__":
         folds=(24, 7),
         nr_in_cycles=70,
         nr_examples=5,
-        n_jobs=2,
+        n_jobs=1,
     )
     traffic = ts_experiments.run()
 

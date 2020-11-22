@@ -16,7 +16,7 @@ from tensorly.decomposition import parafac, tucker
 from .utils import mad, multifold, rmse
 
 
-TENSOR_MAX_ITER = 10_000
+TENSOR_MAX_ITER = 500
 
 
 class ForecasterResult:
@@ -202,17 +202,32 @@ class CPForecaster(TensorForecaster):
         nr_params: int,
         folds: Tuple[int],
         error_callbacks: Tuple[Callable] = (rmse, mad),
+        alpha: float = 1.0,
     ):
         """
-        :param nr_params: PARAFAC rank
+        Parameters
+        ----------
+        nr_params
+            rank of tensor
+        alpha
+            smoothing parameter for the time factor
         """
         super().__init__(nr_params, folds, error_callbacks)
+        self.alpha = alpha
         self.nr_total_params = int(nr_params * np.sum(folds))
 
     def tensor_reconstruction(self, data_in: np.ndarray) -> np.ndarray:
         tensor = multifold(data_in, list(self.folds))
         tensor = copy.deepcopy(tensor)
-        fac = parafac(tensor, rank=self.nr_params, n_iter_max=TENSOR_MAX_ITER, tol=1.0e-15, linesearch=True)
+        fac = parafac(tensor, rank=self.nr_params, n_iter_max=TENSOR_MAX_ITER, tol=1.0e-13, linesearch=True)
+
+        if self.alpha < 1:
+            time_factor = fac.factors[0]
+            for i in range(time_factor.shape[0]):
+                time_factor[i] = time_factor[i] * self.alpha + time_factor[i-1] * (1 - self.alpha)
+
+            fac.factors = [time_factor] + fac.factors[1:]
+
         return tl.cp_to_tensor(fac).ravel()
 
 
@@ -222,12 +237,19 @@ class TuckerForecaster(TensorForecaster):
         nr_params: int,
         folds: Tuple[int],
         error_callbacks: Tuple[Callable] = (rmse, mad),
+        alpha: float = 1.0,
     ):
         """
-        :param nr_params: PARAFAC rank
+        Parameters
+        ----------
+        nr_params
+            rank of tensor
+        alpha
+            smoothing parameter for the time factor
         """
         super().__init__(nr_params, folds, error_callbacks)
         ranks_ = self._get_tucker_ranks()
+        self.alpha = alpha
         self.nr_total_params = int(
             np.sum(np.array(self.folds) * np.array(ranks_[1:])) + np.prod(ranks_[1:])
         )
@@ -245,9 +267,27 @@ class TuckerForecaster(TensorForecaster):
         assert isinstance(self.nr_params, int)
 
         ranks = self._get_tucker_ranks()
-        core, factors = tucker(tensor, ranks=ranks, n_iter_max=TENSOR_MAX_ITER, tol=1.0e-15)
+
+        core, factors = tucker(tensor, ranks=ranks, n_iter_max=TENSOR_MAX_ITER, tol=1.0e-13)
+
+        if self.alpha < 1:
+            time_factor = factors[0]
+            for i in range(time_factor.shape[0]):
+                time_factor[i] = time_factor[i] * self.alpha + time_factor[i-1] * (1 - self.alpha)
+
+            factors = [time_factor] + factors[1:]
 
         return tl.tucker_to_tensor((core, factors)).ravel()
+
+
+class SmoothingCPForecaster(CPForecaster):
+    def __init__(self, alpha=0.5, **kwargs):
+        super().__init__(alpha=alpha, **kwargs)
+
+
+class SmoothingTuckerForecaster(TuckerForecaster):
+    def __init__(self, alpha=0.5, **kwargs):
+        super().__init__(alpha=alpha, **kwargs)
 
 
 class HoltWintersForecaster(TensorForecaster):
@@ -256,7 +296,7 @@ class HoltWintersForecaster(TensorForecaster):
         folds: Tuple[int],
         error_callbacks: Tuple[Callable] = (rmse, mad),
         nr_params: int = 1,
-        alpha: float = 0.1,
+        alpha: float = 0.5,
     ):
         """
         """

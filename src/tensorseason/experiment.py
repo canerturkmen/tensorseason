@@ -15,7 +15,7 @@ from .forecaster import (
     FourierBasisRegressionForecaster,
     HoltWintersForecaster,
     SeasonalForecaster,
-    TuckerForecaster,
+    TuckerForecaster, SmoothingTuckerForecaster, SmoothingCPForecaster,
 )
 from .utils import (
     get_param_sweep, mad, rmse, trend_cycle_decompose
@@ -138,7 +138,9 @@ class TensorSeasonExperiment:
             SingleForecasterExperiment(DCTForecaster, dft_sweep, folds=self.folds),
             SingleForecasterExperiment(DFTForecaster, dft_sweep, folds=self.folds),
             SingleForecasterExperiment(CPForecaster, tensor_sweep, folds=self.folds),
+            SingleForecasterExperiment(SmoothingCPForecaster, tensor_sweep, folds=self.folds),
             SingleForecasterExperiment(TuckerForecaster, tensor_sweep, folds=self.folds),
+            SingleForecasterExperiment(SmoothingTuckerForecaster, tensor_sweep, folds=self.folds),
             SingleForecasterExperiment(FourierBasisRegressionForecaster, fbm_sweep, folds=self.folds),
             SingleForecasterExperiment(HoltWintersForecaster, [1], folds=self.folds),
         ]
