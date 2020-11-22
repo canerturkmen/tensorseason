@@ -3,6 +3,9 @@ build/
 dist/
 venv/
 data/
+datasets/
+results/
+
 __pycache__/
 *.html
 *.so
@@ -12,10 +15,12 @@ __pycache__/
 .idea/
 .tox/
 
+.DS_Store
+*egg-info/
+
 MANIFEST*
 
 docs/build/
 
 docker/
 scripts/
-src/
