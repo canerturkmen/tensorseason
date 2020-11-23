@@ -167,26 +167,30 @@ class TensorSeasonExperiment:
             exps_ = self._get_experiments()
 
             for experiment in exps_:
-                ins, outs, pars, _ = experiment(vals, nr_in_cycles=self.nr_in_cycles)
+                try:
+                    ins, outs, pars, _ = experiment(vals, nr_in_cycles=self.nr_in_cycles)
 
-                result_columns = {}
-                for err in ins:
-                    result_columns[f"in_{err}"] = ins[err]
-                for err in outs:
-                    result_columns[f"out_{err}"] = outs[err]
+                    result_columns = {}
+                    for err in ins:
+                        result_columns[f"in_{err}"] = ins[err]
+                    for err in outs:
+                        result_columns[f"out_{err}"] = outs[err]
 
-                results = pd.DataFrame(
-                    dict(
-                        parameters=pars,
-                        **result_columns,
+                    results = pd.DataFrame(
+                        dict(
+                            parameters=pars,
+                            **result_columns,
+                        )
                     )
-                )
-                results["experiment_id"] = exp_id_
-                results["dataset"] = self.dataset_name
-                results["model"] = experiment.forecaster_class.__name__
-                results["data_id"] = data["id"]
+                    results["experiment_id"] = exp_id_
+                    results["dataset"] = self.dataset_name
+                    results["model"] = experiment.forecaster_class.__name__
+                    results["data_id"] = data["id"]
 
-                frames_.append(results)
+                    frames_.append(results)
+
+                except Exception as e:
+                    print(f"Exception encountered at {experiment.forecaster_class}, data id: {data['id']}")
 
             return pd.concat(frames_)
 
