@@ -4,6 +4,7 @@ dist/
 venv/
 data/
 datasets/
+notebooks/result_pickles/
 results/
 
 __pycache__/
